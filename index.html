@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CampusMate AI · MBU Student Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">C+</div>
+      <div><strong>CampusMate AI</strong><span>MBU student assistant</span></div>
+    </div>
+    <nav id="quick" aria-label="Quick questions">
+      <p class="group">Explore MBU</p>
+      <button data-q="Give me an overview of Mohan Babu University.">University overview</button>
+      <button data-q="What courses and programmes does MBU offer?">Courses &amp; programmes</button>
+      <button data-q="How do I apply for admission to MBU?">Admissions</button>
+      <button data-q="What are the fees and scholarships at MBU?">Fees &amp; scholarships</button>
+      <button data-q="What verified information is available about placements at MBU?">Placements</button>
+      <button data-q="Tell me about hostel and campus facilities at MBU.">Hostel &amp; campus</button>
+    </nav>
+    <div class="human">
+      <p><strong>Need a person?</strong> For official answers, visit MBU's website or contact admissions.</p>
+      <a href="https://admissions.mbu.asia/" target="_blank" rel="noopener noreferrer">Open admissions site</a>
+    </div>
+    <p class="foot">Unofficial assistant made for the MBU community.</p>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <div><h1>Ask about MBU</h1><p><span class="dot"></span>Assistant online</p></div>
+      <button id="newchat" type="button">New chat</button>
+    </header>
+    <section id="log" class="log" aria-live="polite"></section>
+    <form id="composer" class="composer">
+      <textarea id="question" rows="1" placeholder="Ask about courses, fees, placements…" aria-label="Your question"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

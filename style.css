@@ -1,0 +1,52 @@
+:root{--ink:#1a1d3a;--side:#1a1d3a;--accent:#f0a500;--bg:#eef1f6;--card:#fff;--line:#d9deea;--text:#1d2233;--muted:#5d6580;--err:#b3261e;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#12141f;--card:#1c2030;--line:#2c3248;--text:#e8eaf3;--muted:#9aa2bd;--err:#ff8a80}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);line-height:1.55}
+.app{display:grid;grid-template-columns:280px 1fr;height:100%}
+.side{background:var(--side);color:#e9ebf7;padding:22px 18px;display:flex;flex-direction:column;gap:20px;overflow:auto}
+.brand{display:flex;gap:12px;align-items:center}
+.logo{width:42px;height:42px;border-radius:10px;background:var(--accent);color:var(--ink);font-weight:700;display:grid;place-items:center}
+.brand strong{display:block;font-size:17px}.brand span{font-size:13px;color:#a9aed0}
+.group{margin:0 0 6px;font-size:13px;color:#a9aed0}
+#quick{display:flex;flex-direction:column;gap:4px}
+#quick button{text-align:left;background:transparent;border:0;color:inherit;font:inherit;padding:10px 12px;border-radius:8px;cursor:pointer;border-left:3px solid transparent}
+#quick button:hover:not(:disabled){background:rgba(255,255,255,.08);border-left-color:var(--accent)}
+#quick button:disabled{opacity:.5;cursor:not-allowed}
+.human{margin-top:auto;padding:14px;border:1px solid rgba(255,255,255,.18);border-radius:10px;font-size:14px}
+.human p{margin:0 0 10px}
+.human a{color:var(--accent);font-weight:600}
+.foot{margin:0;font-size:12px;color:#a9aed0}
+.main{display:flex;flex-direction:column;min-width:0;height:100%}
+.top{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:18px}.top p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2e9e5b;margin-right:6px}
+#newchat{font:inherit;background:transparent;border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:8px;cursor:pointer}
+#newchat:hover{border-color:var(--accent)}
+.log{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:min(720px,88%);padding:12px 16px;border-radius:14px;overflow-wrap:anywhere}
+.msg p{margin:0 0 8px}.msg p:last-child{margin:0}
+.msg ul{margin:4px 0 8px;padding-left:20px}
+.msg a{color:inherit;text-decoration:underline}
+.msg.bot{background:var(--card);border:1px solid var(--line);align-self:flex-start;border-bottom-left-radius:4px}
+.msg.user{background:var(--ink);color:#fff;align-self:flex-end;border-bottom-right-radius:4px;white-space:pre-wrap}
+@media (prefers-color-scheme:dark){.msg.user{background:#34407a}}
+.msg.error{background:transparent;border:1px solid var(--err);color:var(--err);align-self:flex-start}
+.typing{display:inline-flex;gap:4px;align-items:center;height:20px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:b 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,60%,100%{opacity:.3}30%{opacity:1}}
+.composer{display:flex;gap:10px;padding:14px 24px 20px;background:var(--bg)}
+textarea{flex:1;font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;resize:none;max-height:128px}
+#send{font:inherit;font-weight:600;background:var(--accent);color:#1a1d3a;border:0;border-radius:12px;padding:0 22px;cursor:pointer}
+#send:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.typing i{animation:none}}
+@media (max-width:800px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .side{flex-direction:row;flex-wrap:wrap;padding:12px;gap:10px}
+  .brand span,.group,.human,.foot{display:none}
+  #quick{flex-direction:row;overflow-x:auto;width:100%}
+  #quick button{white-space:nowrap;border:1px solid rgba(255,255,255,.2)}
+  .log,.composer{padding-left:14px;padding-right:14px}
+}
