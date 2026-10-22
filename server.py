@@ -2,6 +2,7 @@ import os
 import requests
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 app = Flask(__name__, static_folder="static", static_url_path="")
@@ -12,7 +13,15 @@ MODEL = os.getenv("MODEL") or {
     "gemini": "gemini-3.8-flash",
     "anthropic": "claude-haiku-4-5",
     "openai": "gpt-4o-mini",
-}[PROVIDER]
+
+}def post_retry(*args, **kwargs):
+    for attempt in range(3):
+        r = requests.post(*args, **kwargs)
+        if r.status_code not in (429, 503):
+            return r
+        time.sleep(2 * (attempt + 1))
+    return r
+[PROVIDER]
 
 def load_facts():
     try:
@@ -49,7 +58,7 @@ def call_model(history, message):
                      "parts": [{"text": m["content"]}]} for m in msgs]
         contents[0]["parts"][0]["text"] = SYSTEM + "\n\nStudent question:\n" + contents[0]["parts"][0]["text"]
         body = {"contents": contents}
-        r = requests.post(url, json=body, headers={"x-goog-api-key": API_KEY}, timeout=60)
+                r = post_retry(url, json=body, headers={"x-goog-api-key": API_KEY}, timeout=60)
         pick = lambda j: j["candidates"][0]["content"]["parts"][0]["text"]
     elif PROVIDER == "anthropic":
         r = requests.post("https://api.anthropic.com/v1/messages", timeout=60,
@@ -66,6 +75,8 @@ def call_model(history, message):
 
     if r.status_code in (401, 403):
         raise UpstreamError("The API key was rejected. Check API_KEY in your .env file.")
+    if r.status_code == 503:
+        raise UpstreamError("The AI is busy right now. Please try again in a minute.")
     if r.status_code == 429:
         raise UpstreamError("The AI provider says quota or credits are used up. Add billing or wait, then retry.")
     if not r.ok:
