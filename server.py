@@ -24,6 +24,7 @@ MODEL = os.getenv("MODEL") or {
     "anthropic": "claude-haiku-4-5",
     "openai": "gpt-4o-mini",
 }.get(PROVIDER, "")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
 
 MAX_OUTPUT_TOKENS = 256
 HTTP = requests.Session()
@@ -172,39 +173,53 @@ def open_gemini_stream(history, message):
         }
         for item in build_messages(history, message)
     ]
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{MODEL}:streamGenerateContent?alt=sse"
-    )
-    response = HTTP.post(
-        url,
-        headers={"x-goog-api-key": API_KEY},
-        json={
-            "systemInstruction": {"parts": [{"text": SYSTEM}]},
-            "contents": contents,
-            "generationConfig": {"maxOutputTokens": MAX_OUTPUT_TOKENS},
-        },
-        timeout=(5, 45),
-        stream=True,
-    )
-    if response.status_code in (401, 403):
-        response.close()
-        raise UpstreamError("The API key was rejected. Check API_KEY in your .env file.")
-    if response.status_code == 503:
-        response.close()
-        raise UpstreamError("The AI is busy right now. Please try again in a minute.")
-    if response.status_code == 429:
-        response.close()
-        raise UpstreamError(
-            "The AI provider says quota or credits are used up. Add billing or wait, then retry."
+    models = [MODEL]
+    if GEMINI_FALLBACK_MODEL and GEMINI_FALLBACK_MODEL not in models:
+        models.append(GEMINI_FALLBACK_MODEL)
+
+    for index, model in enumerate(models):
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model}:streamGenerateContent?alt=sse"
         )
-    if not response.ok:
-        print("Provider error:", response.status_code, response.text[:500])
-        response.close()
-        raise UpstreamError(
-            "The AI service returned an error. Check the server console for details."
+        response = HTTP.post(
+            url,
+            headers={"x-goog-api-key": API_KEY},
+            json={
+                "systemInstruction": {"parts": [{"text": SYSTEM}]},
+                "contents": contents,
+                "generationConfig": {"maxOutputTokens": MAX_OUTPUT_TOKENS},
+            },
+            timeout=(5, 45),
+            stream=True,
         )
-    return response
+        if response.status_code == 503 and index + 1 < len(models):
+            print(f"Gemini model {model} returned 503; trying fallback model {models[index + 1]}.")
+            response.close()
+            continue
+        if response.status_code in (401, 403):
+            response.close()
+            raise UpstreamError("The API key was rejected. Check API_KEY in your .env file.")
+        if response.status_code == 503:
+            response.close()
+            raise UpstreamError(
+                "Gemini is unavailable on both the primary and fallback models right now. "
+                "Check https://aistudio.google.com/status and verify your API key and quota."
+            )
+        if response.status_code == 429:
+            response.close()
+            raise UpstreamError(
+                "The Gemini API quota or rate limit was reached. Check your Google AI Studio limits."
+            )
+        if not response.ok:
+            print("Provider error:", response.status_code, response.text[:500])
+            response.close()
+            raise UpstreamError(
+                "The AI service returned an error. Check the server console for details."
+            )
+        return response
+
+    raise UpstreamError("No Gemini model is configured.", 500)
 
 
 def encode_stream_event(data):
