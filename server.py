@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request, send_from_directory
 load_dotenv()
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
 
 PROVIDER = os.getenv("PROVIDER", "gemini").lower()
 API_KEY = os.getenv("API_KEY", "")
@@ -18,6 +19,7 @@ MODEL = os.getenv("MODEL") or {
 
 MAX_OUTPUT_TOKENS = 512
 HTTP = requests.Session()
+HTTP.headers.update({"User-Agent": "CampusMateAI/1.0"})
 
 
 def load_facts():
@@ -147,6 +149,18 @@ def call_model(history, message):
             "The AI service sent an empty reply. Try rephrasing your question."
         )
     return answer
+
+
+@app.after_request
+def apply_cache_control(response):
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    else:
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.get("/")
