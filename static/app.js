@@ -215,4 +215,63 @@ function resetChat() {
 }
 
 document.getElementById("newchat").addEventListener("click", resetChat);
+
+const settingsDialog = document.getElementById("settings-dialog");
+const settingsForm = document.getElementById("settings-form");
+const settingsStatus = document.getElementById("settings-status");
+const apiKeyInput = document.getElementById("api-key");
+const settingsSave = document.getElementById("settings-save");
+const isLocalSite = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+document.getElementById("settings-button").hidden = !isLocalSite;
+
+document.getElementById("settings-button").addEventListener("click", async () => {
+  settingsStatus.textContent = "Checking local settings…";
+  settingsDialog.showModal();
+  try {
+    const response = await fetch("/api/settings");
+    const data = await response.json().catch(() => ({}));
+    settingsStatus.textContent = response.status === 404
+      ? "Restart the server and refresh this page to enable settings."
+      : response.ok
+      ? (data.api_key_configured ? "A key is saved locally. Enter a new key to replace it." : "No key is saved yet.")
+      : (data.error || "Could not check settings.");
+  } catch {
+    settingsStatus.textContent = "Could not reach the local server.";
+  }
+  apiKeyInput.focus();
+});
+
+document.getElementById("settings-close").addEventListener("click", () => {
+  settingsDialog.close();
+  settingsForm.reset();
+});
+
+settingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  settingsSave.disabled = true;
+  settingsStatus.textContent = "Saving key locally…";
+  try {
+    const response = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: apiKeyInput.value })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 404) {
+      settingsStatus.textContent = "Restart the server and refresh this page to enable settings.";
+      return;
+    }
+    if (!response.ok) {
+      settingsStatus.textContent = data.error || "Could not save the key.";
+      return;
+    }
+    settingsForm.reset();
+    settingsStatus.textContent = "Key saved in .env. You can try chatting now.";
+  } catch {
+    settingsStatus.textContent = "Could not reach the local server. The key was not confirmed as saved.";
+  } finally {
+    settingsSave.disabled = false;
+  }
+});
+
 addMessage("bot", GREETING);

@@ -34,7 +34,10 @@
   <main class="main">
     <header class="top">
       <div><h1>Ask about MBU</h1><p><span class="dot"></span>Assistant online</p></div>
-      <button id="newchat" type="button">New chat</button>
+      <div class="top-actions">
+        <button id="settings-button" type="button">API settings</button>
+        <button id="newchat" type="button">New chat</button>
+      </div>
     </header>
     <section id="log" class="log" aria-live="polite"></section>
     <form id="composer" class="composer">
@@ -43,6 +46,19 @@
     </form>
   </main>
 </div>
+<dialog id="settings-dialog" aria-labelledby="settings-title">
+  <form id="settings-form">
+    <h2 id="settings-title">Gemini API settings</h2>
+    <p class="settings-help">Enter your Gemini API key. It is saved only in this computer's local .env file and is never shown again.</p>
+    <p id="settings-status" role="status"></p>
+    <label for="api-key">Gemini API key</label>
+    <input id="api-key" name="api_key" type="password" autocomplete="new-password" required>
+    <div class="settings-actions">
+      <button id="settings-close" type="button">Cancel</button>
+      <button id="settings-save" type="submit">Save key</button>
+    </div>
+  </form>
+</dialog>
 <script src="app.js"></script>
 </body>
 </html>

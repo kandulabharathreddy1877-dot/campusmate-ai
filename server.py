@@ -1,8 +1,9 @@
 import json
 import os
+from pathlib import Path
 
 import requests
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 from flask import (
     Flask,
     Response,
@@ -12,10 +13,11 @@ from flask import (
     stream_with_context,
 )
 
-load_dotenv()
+ENV_FILE = Path(__file__).with_name(".env")
+load_dotenv(ENV_FILE)
 
 app = Flask(__name__, static_folder="static", static_url_path="")
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 PROVIDER = os.getenv("PROVIDER", "gemini").lower()
 API_KEY = os.getenv("API_KEY", "")
@@ -25,10 +27,15 @@ MODEL = os.getenv("MODEL") or {
     "openai": "gpt-4o-mini",
 }.get(PROVIDER, "")
 GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
+LOCAL_SETTINGS_ENABLED = os.getenv("LOCAL_SETTINGS_ENABLED", "true").lower() == "true"
 
 MAX_OUTPUT_TOKENS = 256
 HTTP = requests.Session()
 HTTP.headers.update({"User-Agent": "CampusMateAI/1.0"})
+
+
+def is_local_request():
+    return request.remote_addr in ("127.0.0.1", "::1")
 
 
 def load_facts():
@@ -268,7 +275,7 @@ def apply_cache_control(response):
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     else:
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
@@ -293,7 +300,7 @@ def chat():
         return jsonify(error="That question is too long. Keep it under 2000 characters."), 400
     if not API_KEY.strip() or API_KEY.strip().lower() == "your_api_key_here":
         return jsonify(
-            error="No valid API key set. Replace the API_KEY placeholder in your .env file with a real provider key and restart the server."
+            error="No valid API key is configured. Set API_KEY in the server environment and restart the service."
         ), 500
 
     history = data.get("history")
@@ -323,6 +330,39 @@ def chat():
         return jsonify(
             error="Could not reach the AI provider. Check your internet connection."
         ), 502
+
+
+@app.get("/api/settings")
+def get_settings():
+    if not LOCAL_SETTINGS_ENABLED or not is_local_request():
+        return jsonify(error="Settings are only available on this computer."), 403
+    return jsonify(api_key_configured=bool(API_KEY.strip()))
+
+
+@app.post("/api/settings")
+def save_settings():
+    if not LOCAL_SETTINGS_ENABLED or not is_local_request():
+        return jsonify(error="Settings are only available on this computer."), 403
+
+    data = request.get_json(silent=True)
+    api_key = data.get("api_key") if isinstance(data, dict) else None
+    if not isinstance(api_key, str) or not api_key.strip():
+        return jsonify(error="Enter your Gemini API key."), 400
+
+    api_key = api_key.strip()
+    if len(api_key) > 512:
+        return jsonify(error="The API key is too long."), 400
+
+    try:
+        saved, _, _ = set_key(str(ENV_FILE), "API_KEY", api_key, quote_mode="always")
+    except OSError:
+        return jsonify(error="Could not save .env. Check that the project folder is writable."), 500
+    if not saved:
+        return jsonify(error="Could not save .env. Check that the project folder is writable."), 500
+
+    global API_KEY
+    API_KEY = api_key
+    return jsonify(saved=True)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: campusmate-ai
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers 1 --threads 4 --timeout 120 server:app
+    healthCheckPath: /
+    envVars:
+      - key: PROVIDER
+        value: gemini
+      - key: MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_FALLBACK_MODEL
+        value: gemini-2.5-flash
+      - key: LOCAL_SETTINGS_ENABLED
+        value: "false"
+      - key: API_KEY
+        sync: false
