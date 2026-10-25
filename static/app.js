@@ -72,6 +72,63 @@ function addTyping() {
   return div;
 }
 
+async function readStreamingAnswer(response, message) {
+  if (!response.body) {
+    return { answer: "", error: "The server did not provide a response stream. Please try again." };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let pendingData = [];
+  let answer = "";
+  let error = "";
+
+  function dispatchEvent() {
+    if (!pendingData.length) return;
+
+    try {
+      const event = JSON.parse(pendingData.join("\n"));
+      if (event.error) {
+        error = event.error;
+      } else if (typeof event.text === "string") {
+        answer += event.text;
+        message.innerHTML = renderBot(answer);
+        log.scrollTop = log.scrollHeight;
+      }
+    } catch {
+      error = "The server sent an invalid response. Please try again.";
+    }
+    pendingData = [];
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line) dispatchEvent();
+      else if (line.startsWith("data:")) pendingData.push(line.slice(5).trimStart());
+    }
+
+    if (done) {
+      if (buffer) {
+        if (buffer.startsWith("data:")) pendingData.push(buffer.slice(5).trimStart());
+      }
+      dispatchEvent();
+      break;
+    }
+    if (error) {
+      await reader.cancel();
+      break;
+    }
+  }
+
+  return { answer, error };
+}
+
 function setBusy(state) {
   busy = state;
   sendBtn.disabled = state;
@@ -94,17 +151,30 @@ async function ask(question) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: trimmed, history: chatHistory.slice(-8) })
+      body: JSON.stringify({ message: trimmed, history: chatHistory.slice(-4) })
     });
-    const data = await response.json().catch(() => ({}));
-    typing.remove();
 
-    if (response.ok && data.answer) {
-      addMessage("bot", data.answer);
-      chatHistory.push({ role: "user", content: trimmed });
-      chatHistory.push({ role: "assistant", content: data.answer });
+    if (response.ok && response.headers.get("content-type")?.includes("text/event-stream")) {
+      typing.remove();
+      const botMessage = addMessage("bot", "");
+      const result = await readStreamingAnswer(response, botMessage);
+      if (result.answer && !result.error) {
+        chatHistory.push({ role: "user", content: trimmed });
+        chatHistory.push({ role: "assistant", content: result.answer });
+      }
+      if (result.error) addMessage("error", result.error);
+      else if (!result.answer) addMessage("error", "The AI service sent an empty reply. Try again.");
     } else {
-      addMessage("error", data.error || "Something went wrong. Please try again.");
+      const data = await response.json().catch(() => ({}));
+      typing.remove();
+
+      if (response.ok && data.answer) {
+        addMessage("bot", data.answer);
+        chatHistory.push({ role: "user", content: trimmed });
+        chatHistory.push({ role: "assistant", content: data.answer });
+      } else {
+        addMessage("error", data.error || "Something went wrong. Please try again.");
+      }
     }
   } catch (error) {
     typing.remove();

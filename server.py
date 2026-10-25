@@ -1,8 +1,16 @@
+import json
 import os
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    request,
+    send_from_directory,
+    stream_with_context,
+)
 
 load_dotenv()
 
@@ -12,12 +20,12 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
 PROVIDER = os.getenv("PROVIDER", "gemini").lower()
 API_KEY = os.getenv("API_KEY", "")
 MODEL = os.getenv("MODEL") or {
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3.5-flash-lite",
     "anthropic": "claude-haiku-4-5",
     "openai": "gpt-4o-mini",
 }.get(PROVIDER, "")
 
-MAX_OUTPUT_TOKENS = 512
+MAX_OUTPUT_TOKENS = 256
 HTTP = requests.Session()
 HTTP.headers.update({"User-Agent": "CampusMateAI/1.0"})
 
@@ -28,6 +36,19 @@ def load_facts():
             return facts_file.read()
     except FileNotFoundError:
         return ""
+
+
+def build_messages(history, message):
+    messages = [
+        {"role": item["role"], "content": item["content"][:4000]}
+        for item in history
+        if isinstance(item, dict)
+        and item.get("role") in ("user", "assistant")
+        and isinstance(item.get("content"), str)
+        and item["content"]
+    ][-4:]
+    messages.append({"role": "user", "content": message})
+    return messages
 
 
 SYSTEM = """- If someone asks who created you or who built this website, say you were created by Bharath Kumar Reddy.
@@ -51,15 +72,7 @@ class UpstreamError(Exception):
 
 
 def call_model(history, message):
-    messages = [
-        {"role": item["role"], "content": item["content"][:4000]}
-        for item in history
-        if isinstance(item, dict)
-        and item.get("role") in ("user", "assistant")
-        and isinstance(item.get("content"), str)
-        and item["content"]
-    ][-8:]
-    messages.append({"role": "user", "content": message})
+    messages = build_messages(history, message)
 
     timeout = (5, 45)
 
@@ -151,6 +164,88 @@ def call_model(history, message):
     return answer
 
 
+def open_gemini_stream(history, message):
+    contents = [
+        {
+            "role": "model" if item["role"] == "assistant" else "user",
+            "parts": [{"text": item["content"]}],
+        }
+        for item in build_messages(history, message)
+    ]
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{MODEL}:streamGenerateContent?alt=sse"
+    )
+    response = HTTP.post(
+        url,
+        headers={"x-goog-api-key": API_KEY},
+        json={
+            "systemInstruction": {"parts": [{"text": SYSTEM}]},
+            "contents": contents,
+            "generationConfig": {"maxOutputTokens": MAX_OUTPUT_TOKENS},
+        },
+        timeout=(5, 45),
+        stream=True,
+    )
+    if response.status_code in (401, 403):
+        response.close()
+        raise UpstreamError("The API key was rejected. Check API_KEY in your .env file.")
+    if response.status_code == 503:
+        response.close()
+        raise UpstreamError("The AI is busy right now. Please try again in a minute.")
+    if response.status_code == 429:
+        response.close()
+        raise UpstreamError(
+            "The AI provider says quota or credits are used up. Add billing or wait, then retry."
+        )
+    if not response.ok:
+        print("Provider error:", response.status_code, response.text[:500])
+        response.close()
+        raise UpstreamError(
+            "The AI service returned an error. Check the server console for details."
+        )
+    return response
+
+
+def encode_stream_event(data):
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def stream_gemini_response(response):
+    answer_received = False
+    try:
+        for raw_line in response.iter_lines(chunk_size=1):
+            if not raw_line:
+                continue
+            line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+            if not line.startswith("data:"):
+                continue
+            try:
+                data = json.loads(line[5:].strip())
+                parts = data["candidates"][0]["content"]["parts"]
+            except (json.JSONDecodeError, KeyError, IndexError, TypeError) as error:
+                raise UpstreamError(
+                    "The AI service sent an invalid reply. Please try again."
+                ) from error
+            for part in parts:
+                text = part.get("text")
+                if isinstance(text, str) and text:
+                    answer_received = True
+                    yield encode_stream_event({"text": text})
+        if not answer_received:
+            yield encode_stream_event(
+                {"error": "The AI service sent an empty reply. Try rephrasing your question."}
+            )
+    except UpstreamError as error:
+        yield encode_stream_event({"error": error.user_message})
+    except requests.RequestException:
+        yield encode_stream_event(
+            {"error": "Could not reach the AI provider. Check your internet connection."}
+        )
+    finally:
+        response.close()
+
+
 @app.after_request
 def apply_cache_control(response):
     if request.path.startswith("/api/"):
@@ -189,6 +284,21 @@ def chat():
     history = data.get("history")
     if not isinstance(history, list):
         history = []
+
+    if PROVIDER == "gemini":
+        try:
+            upstream_response = open_gemini_stream(history, message)
+        except UpstreamError as error:
+            return jsonify(error=error.user_message), error.status
+        except requests.RequestException:
+            return jsonify(
+                error="Could not reach the AI provider. Check your internet connection."
+            ), 502
+        return Response(
+            stream_with_context(stream_gemini_response(upstream_response)),
+            mimetype="text/event-stream",
+            headers={"X-Accel-Buffering": "no"},
+        )
 
     try:
         return jsonify(answer=call_model(history, message))
