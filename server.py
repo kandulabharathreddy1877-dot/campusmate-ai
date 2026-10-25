@@ -181,9 +181,9 @@ def chat():
     message = message.strip()
     if len(message) > 2000:
         return jsonify(error="That question is too long. Keep it under 2000 characters."), 400
-    if not API_KEY:
+    if not API_KEY.strip() or API_KEY.strip().lower() == "your_api_key_here":
         return jsonify(
-            error="No API key set. Add API_KEY to your .env file and restart the server."
+            error="No valid API key set. Replace the API_KEY placeholder in your .env file with a real provider key and restart the server."
         ), 500
 
     history = data.get("history")
