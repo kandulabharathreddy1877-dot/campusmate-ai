@@ -11,7 +11,7 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 PROVIDER = os.getenv("PROVIDER", "gemini").lower()
 API_KEY = os.getenv("API_KEY", "")
 MODEL = os.getenv("MODEL") or {
-    "gemini": "gemini-3.8-flash",
+    "gemini": "gemini-2.5-flash",
     "anthropic": "claude-haiku-4-5",
     "openai": "gpt-4o-mini",
 }.get(PROVIDER, "")
